@@ -4,7 +4,7 @@ import numpy as np
 import datetime
 
 # Logo and Header
-st.image("https://path-to-your-logo.png", width=200)  # Replace with actual logo URL
+st.image("https://path-to-your-logo.png", width=200)  # Replace with your actual logo URL
 st.title("Futureflow - Predict. Boost. Succeed.")
 st.markdown("See your future revenue, detect slow weeks, and boost your cash flow with actionable tips!")
 
