@@ -2,15 +2,13 @@ pandas==2.0.3
 numpy==1.25.0
 matplotlib==3.7.2
 plotly==5.17.0
-streamlit==1.20.0  # Downgraded to ensure compatibility
+streamlit==1.20.0
 prophet==1.1.4
 statsmodels==0.14.0
 scikit-learn==1.3.0
 python-dateutil==2.8.2
-pillow==9.5.0  # Compatible with Streamlit
+pillow==9.5.0
 kaleido==0.2.1
-pip install-24.0 -> 24.3.1 requirements.txt
-pip list
 
 
 
