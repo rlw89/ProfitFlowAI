@@ -9,6 +9,8 @@ scikit-learn==1.3.0
 python-dateutil==2.8.2
 pillow==9.5.0  # Compatible with Streamlit
 kaleido==0.2.1
+pip install -r requirements.txt
+pip list
 
 
 
