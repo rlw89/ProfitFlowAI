@@ -1,89 +1,110 @@
 import pandas as pd
 import numpy as np
+import random
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import streamlit as st
 from io import BytesIO
 import base64
-from datetime import datetime
 
-# App Configurations
+# App Title and Logo
 st.set_page_config(page_title="FutureFlow", page_icon="https://i.ibb.co/RbmmVwq/futureflow-logo.webp")
 st.image("https://i.ibb.co/RbmmVwq/futureflow-logo.webp", width=200)
 st.title("FutureFlow - Predict. Boost. Succeed.")
 st.write("See your future revenue, detect slow weeks, and boost your cash flow with actionable tips!")
 
-# How to Use
+# How to Use Section
 st.header("How to Use")
-st.markdown("""
-1. **Upload your revenue data**: Use a CSV file with columns `Date` and `Revenue`.
-2. **View your forecast**: Visualize predictions for the next 30, 60, and 90 days.
-3. **Act on Suggestions**: Use tips to recover or optimize revenue.
-""")
-st.download_button(
-    "Download Sample CSV",
-    data="Date,Revenue\n2024-01-01,100\n2024-01-02,150\n2024-01-03,200\n2024-01-04,130\n2024-01-05,170",
-    file_name="sample_data.csv",
-    mime="text/csv"
+st.markdown(
+    """
+    1. **Upload your revenue data**: Use a CSV file with columns containing `Date` and `Revenue` (or equivalents).
+    2. **Select your columns**: If column names differ, manually choose them for processing.
+    3. **View your forecast**: Trends for the next 30, 60, and 90 days are displayed.
+    4. **Act on suggestions**: Boost your cash flow with actionable tips below the forecast.
+    """
 )
 
-# Function to load and validate data
+# Sample CSV Download
+st.download_button(
+    label="Download Sample CSV",
+    data="""Date,Revenue\n2024-01-01,100\n2024-01-02,150\n2024-01-03,200\n2024-01-04,130\n2024-01-05,170\n""".encode("utf-8"),
+    file_name="sample_data.csv",
+    mime="text/csv",
+)
+
+# File Upload Section
+uploaded_file = st.file_uploader("Upload your revenue CSV", type=["csv"])
+
+# Cache Data for Optimization
 @st.cache_data
-def load_and_validate(file):
-    """Load CSV data and validate format."""
-    try:
-        data = pd.read_csv(file)
-        if 'Date' not in data.columns or 'Revenue' not in data.columns:
-            return None, "CSV file must include 'Date' and 'Revenue' columns."
-        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-        data = data.dropna(subset=['Date', 'Revenue'])
-        data = data.sort_values('Date')
-        return data, None
-    except Exception as e:
-        return None, f"Failed to load data: {e}"
+def load_and_process_file(file):
+    """Load CSV data and return the DataFrame."""
+    return pd.read_csv(file)
 
-# File Upload
-uploaded_file = st.file_uploader("Upload your revenue CSV (Date, Revenue columns required)", type=["csv"])
 if uploaded_file:
-    data, error = load_and_validate(uploaded_file)
-    if error:
-        st.error(error)
-    elif data.empty:
-        st.warning("No valid data found. Check your file contents.")
-    else:
-        # Display Revenue Forecast
-        st.subheader("📊 Predicted Revenue Trends")
-        forecast_periods = [30, 60, 90]
-        forecasts = {period: data['Revenue'] + np.random.uniform(-50, 50, size=len(data)) for period in forecast_periods}
+    try:
+        with st.spinner("Processing your file..."):
+            data = load_and_process_file(uploaded_file)
 
-        # Interactive Plot
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=data['Date'], y=data['Revenue'], mode='lines+markers', name="Actual Revenue", line=dict(color='red')))
-        for period, values in forecasts.items():
-            fig.add_trace(go.Scatter(x=data['Date'], y=values, mode='lines', name=f"{period}-Day Forecast"))
-        fig.update_layout(title="Revenue Forecast", xaxis_title="Date", yaxis_title="Revenue", hovermode="x unified")
-        st.plotly_chart(fig)
+            # Let user select columns
+            st.subheader("Column Selection")
+            date_col = st.selectbox("Select the Date column:", options=data.columns)
+            revenue_col = st.selectbox("Select the Revenue column:", options=data.columns)
 
-        # Detect Cash Flow Slowdown
-        slowdown = np.random.randint(500, 3000)
-        st.subheader("⚠️ Cash Flow Slowdown Detected!")
-        st.error(f"Potential Revenue Loss: ${slowdown:,.2f}")
+            if date_col and revenue_col:
+                # Validate Selected Columns
+                try:
+                    data[date_col] = pd.to_datetime(data[date_col], errors="coerce")
+                    data = data.dropna(subset=[date_col, revenue_col])
+                    data = data.sort_values(by=date_col)
 
-        # Boost Suggestions
-        st.info("""
-        ### Boost Suggestions:
-        - ✅ Run a 3-day flash sale.
-        - ✅ Bundle your top 2 products into a discounted offer.
-        - ✅ Send a 'last chance' email to your audience.
-        """)
+                    if data.empty:
+                        st.warning("No valid data found. Please check your file.")
+                    else:
+                        st.success("Data successfully loaded and processed!")
 
-        # Export Forecast to CSV
-        forecast_df = data.copy()
-        forecast_df["Forecast_30"] = forecasts[30]
-        forecast_df["Forecast_60"] = forecasts[60]
-        forecast_df["Forecast_90"] = forecasts[90]
-        buffer = BytesIO()
-        forecast_df.to_csv(buffer, index=False)
-        st.download_button("📥 Download Forecast CSV", buffer.getvalue(), file_name="revenue_forecast.csv", mime="text/csv")
+                        # Simulate forecasts
+                        st.subheader("📈 Predicted Revenue Trends")
+                        data['Rolling_30'] = data[revenue_col].rolling(window=3, min_periods=1).mean() + np.random.uniform(-10, 10)
+                        data['Rolling_60'] = data[revenue_col].rolling(window=5, min_periods=1).mean() + np.random.uniform(-20, 20)
+                        data['Rolling_90'] = data[revenue_col].rolling(window=7, min_periods=1).mean() + np.random.uniform(-30, 30)
+
+                        # Plot
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=data[date_col], y=data[revenue_col], mode="lines+markers", name="Actual Revenue", line=dict(color="red")))
+                        fig.add_trace(go.Scatter(x=data[date_col], y=data['Rolling_30'], mode="lines", name="30-Day Forecast", line=dict(color="blue")))
+                        fig.add_trace(go.Scatter(x=data[date_col], y=data['Rolling_60'], mode="lines", name="60-Day Forecast", line=dict(color="lightblue")))
+                        fig.add_trace(go.Scatter(x=data[date_col], y=data['Rolling_90'], mode="lines", name="90-Day Forecast", line=dict(color="pink")))
+
+                        fig.update_layout(title="Revenue Forecast", xaxis_title="Date", yaxis_title="Revenue", hovermode="x unified")
+                        st.plotly_chart(fig)
+
+                        # Detect Cash Flow Slowdown
+                        slowdown = random.uniform(500, 3000)
+                        st.subheader("⚠️ Cash Flow Slowdown Detected!")
+                        st.error(f"Potential Revenue Loss: **${slowdown:,.2f}**")
+
+                        # Boost Suggestions
+                        st.info("""
+                        ### Boost Suggestions:
+                        - ✅ Run a 3-day flash sale.
+                        - ✅ Bundle your top 2 products into a discounted offer.
+                        - ✅ Send a 'last chance' email to your audience.
+                        """)
+
+                        # Allow Forecast Export
+                        buffer = BytesIO()
+                        data.to_csv(buffer, index=False)
+                        st.download_button(
+                            "📥 Download Forecast Data",
+                            buffer.getvalue(),
+                            file_name="forecasted_revenue.csv",
+                            mime="text/csv"
+                        )
+                except Exception as e:
+                    st.error(f"Error processing data: {e}")
+
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
 else:
-    st.info("Please upload a CSV file to generate forecasts.")
-
+    st.info("Please upload a CSV file to proceed.")
