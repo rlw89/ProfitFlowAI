@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
@@ -27,10 +26,10 @@ st.write("See your future revenue, detect slow weeks, and boost your cash flow w
 # Instructions
 st.header("How to Use")
 st.markdown("""
-1. **Upload a CSV file** with `Date` and `Revenue` columns.  
-2. **Choose a model**: ARIMA or Prophet.  
-3. **Adjust parameters** for precision or leave them default.  
-4. **View forecasts** and compare model performance.  
+1. **Upload a CSV file** with `Date` and `Revenue` columns. 
+2. **Choose a model**: ARIMA, SARIMA or Prophet. 
+3. **Adjust parameters** for precision or leave them default. 
+4. **View forecasts** and compare model performance. 
 5. **Download** your forecasted results!  
 """)
 
@@ -66,30 +65,55 @@ if uploaded_file:
 
             # Model Selection
             st.header("Forecasting Models")
-            model_choice = st.radio("Select a Model:", ["ARIMA", "Prophet"])
+            
+            # Initialize model_metrics in session_state if it doesn't exist
+            if "model_metrics" not in st.session_state:
+                st.session_state.model_metrics = []
+            
+            model_choice = st.radio("Select a Model:", ["ARIMA", "SARIMA", "Prophet"])
 
             # ARIMA Model
-            if model_choice == "ARIMA":
-                st.subheader("ARIMA Model Parameters")
+            if model_choice == "ARIMA" or model_choice == "SARIMA":
+                st.subheader(f"{model_choice} Model Parameters")
                 p = st.number_input("p (Auto-Regressive Term)", min_value=0, max_value=5, value=1)
                 d = st.number_input("d (Differencing Term)", min_value=0, max_value=2, value=1)
                 q = st.number_input("q (Moving Average Term)", min_value=0, max_value=5, value=1)
 
-                train = data[:-10]
-                test = data[-10:]
+                if model_choice == "SARIMA":
+                    P = st.number_input("P (Seasonal Auto-Regressive Term)", min_value=0, max_value=5, value=0)
+                    D = st.number_input("D (Seasonal Differencing Term)", min_value=0, max_value=2, value=0)
+                    Q = st.number_input("Q (Seasonal Moving Average Term)", min_value=0, max_value=5, value=0)
+                    s = st.number_input("S (Seasonal Periodicity)", min_value=0, max_value=24, value=0)
+                
+                forecast_horizon = st.number_input("Forecast Horizon (Days)", min_value=1, max_value=365, value=30)
 
-                model = ARIMA(train["Revenue"], order=(p, d, q))
+                train = data[:-forecast_horizon]
+                test = data[-forecast_horizon:]
+                
+                if model_choice == "ARIMA":
+                    model = ARIMA(train["Revenue"], order=(p, d, q))
+                elif model_choice == "SARIMA":
+                    model = ARIMA(train["Revenue"], order=(p, d, q), seasonal_order=(P, D, Q, s))
+
                 model_fit = model.fit()
                 forecast = model_fit.forecast(steps=len(test))
 
                 mae, rmse, mape = evaluate_model(test["Revenue"], forecast)
 
+                # Store metrics for comparison
+                st.session_state.model_metrics.append({
+                    "Model": model_choice,
+                    "MAE": mae,
+                    "RMSE": rmse,
+                    "MAPE": mape
+                })
+
                 # Plot Results
-                st.subheader("ARIMA Forecast")
+                st.subheader(f"{model_choice} Forecast")
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=train["Date"], y=train["Revenue"], name="Train Data"))
                 fig.add_trace(go.Scatter(x=test["Date"], y=test["Revenue"], name="Test Data"))
-                fig.add_trace(go.Scatter(x=test["Date"], y=forecast, name="ARIMA Forecast"))
+                fig.add_trace(go.Scatter(x=test["Date"], y=forecast, name=f"{model_choice} Forecast"))
                 st.plotly_chart(fig)
 
                 st.write(f"**MAE:** {mae:.2f}, **RMSE:** {rmse:.2f}, **MAPE:** {mape:.2f}%")
@@ -99,31 +123,63 @@ if uploaded_file:
                 st.subheader("Prophet Hyperparameters")
                 changepoint_scale = st.slider("Changepoint Prior Scale", 0.01, 0.5, 0.05)
                 seasonality_scale = st.slider("Seasonality Prior Scale", 1.0, 10.0, 5.0)
+                holidays_scale = st.slider("Holidays Prior Scale", 0.1, 10.0, 5.0)
+                seasonality_mode = st.selectbox("Seasonality Mode", ("additive", "multiplicative"))
+                
+                forecast_horizon = st.number_input("Forecast Horizon (Days)", min_value=1, max_value=365, value=30)
 
                 prophet_data = data.rename(columns={"Date": "ds", "Revenue": "y"})
-                prophet = Prophet(changepoint_prior_scale=changepoint_scale, seasonality_prior_scale=seasonality_scale)
+                prophet = Prophet(
+                    changepoint_prior_scale=changepoint_scale,
+                    seasonality_prior_scale=seasonality_scale,
+                    holidays_prior_scale=holidays_scale,
+                    seasonality_mode=seasonality_mode
+                )
                 prophet.fit(prophet_data)
 
-                future = prophet.make_future_dataframe(periods=30)
+                future = prophet.make_future_dataframe(periods=forecast_horizon)
                 forecast = prophet.predict(future)
+
+                # Evaluate Prophet model
+                test_data = prophet_data.tail(forecast_horizon)
+                forecast_data = forecast.tail(forecast_horizon)
+                mae, rmse, mape = evaluate_model(test_data["y"], forecast_data["yhat"])
+                
+                # Store metrics for comparison
+                st.session_state.model_metrics.append({
+                    "Model": "Prophet",
+                    "MAE": mae,
+                    "RMSE": rmse,
+                    "MAPE": mape
+                })
 
                 # Plot Results
                 st.subheader("Prophet Forecast")
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=prophet_data["ds"], y=prophet_data["y"], name="Actual Data"))
                 fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat"], name="Prophet Forecast"))
+                fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_lower"], name="Lower Bound", line=dict(dash="dash")))
+                fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_upper"], name="Upper Bound", line=dict(dash="dash")))
                 st.plotly_chart(fig)
 
                 # Components
                 st.subheader("Forecast Components")
-                st.plotly_chart(px.line(forecast, x="ds", y=["trend", "seasonal"], title="Prophet Components"))
+                st.plotly_chart(px.line(forecast, x="ds", y=["trend", "yearly", "weekly"], title="Prophet Components"))
+            
+            # Display Model Comparison
+            st.subheader("Model Comparison")
+            if st.session_state.model_metrics:
+                comparison_df = pd.DataFrame(st.session_state.model_metrics)
+                st.table(comparison_df.set_index("Model"))
+            else:
+                st.write("No models have been evaluated yet.")
 
             # Boost Suggestions
             st.header("Boost Suggestions")
             st.info("""
-            - ✅ Run a **3-day flash sale**.  
-            - ✅ Bundle your **top 2 products** into a discounted offer.  
-            - ✅ Send a **'last chance' email** to your audience.  
+            - ✅ Run a **3-day flash sale**. 
+            - ✅ Bundle your **top 2 products** into a discounted offer. 
+            - ✅ Send a **'last chance' email** to your audience. 
             """)
 
     except Exception as e:
