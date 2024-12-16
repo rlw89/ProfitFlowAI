@@ -159,18 +159,22 @@ if uploaded_file:
                     future = prophet.make_future_dataframe(periods=forecast_horizon)
                     forecast = prophet.predict(future)
 
-                    # Evaluate Prophet model
+                    # Evaluate Prophet model using the forecast horizon
                     test_data = prophet_data.tail(forecast_horizon)
-                    forecast_data = forecast.tail(forecast_horizon)
-                    mae, rmse, mape = evaluate_model(test_data["y"], forecast_data["yhat"])
+                    # Correctly extract yhat values for the forecast horizon period
+                    forecast_values = forecast.set_index('ds')['yhat'].tail(forecast_horizon)
+
+                    # Ensure test_data and forecast_values are aligned
+                    if not test_data.empty and not forecast_values.empty:
+                        mae, rmse, mape = evaluate_model(test_data["y"], forecast_values)
                     
-                    # Store metrics for comparison
-                    st.session_state.model_metrics.append({
-                        "Model": "Prophet",
-                        "MAE": mae,
-                        "RMSE": rmse,
-                        "MAPE": mape
-                    })
+                        # Store metrics for comparison
+                        st.session_state.model_metrics.append({
+                            "Model": "Prophet",
+                            "MAE": mae,
+                            "RMSE": rmse,
+                            "MAPE": mape
+                        })
 
                     # Plot Results
                     st.subheader("Prophet Forecast")
