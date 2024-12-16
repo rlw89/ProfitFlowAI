@@ -26,20 +26,43 @@ st.write("See your future revenue, detect slow weeks, and boost your cash flow w
 # Instructions
 st.header("How to Use")
 st.markdown("""
-1. **Upload a CSV file** with `Date` and `Revenue` columns. 
-2. **Choose a model**: ARIMA, SARIMA or Prophet. 
-3. **Adjust parameters** for precision or leave them default. 
+1. **Upload a CSV file** with 'Date' and 'Revenue' columns. **(Preferred date format: YYYY-MM-DD)**
+2. **Choose a model:** See descriptions below.
+3. **Adjust parameters** (optional) - tooltips are provided for each parameter.
 4. **View forecasts** and compare model performance. 
 5. **Download** your forecasted results!  
 """)
 
-# Sample CSV
+# Sample CSV (more prominent with in-app preview)
+st.subheader("Sample CSV File")  # Make it stand out more
+st.markdown("Download a sample CSV file to see the required format:")
 st.download_button(
     label="Download Sample CSV",
-    data="Date,Revenue\n2024-01-01,100\n2024-01-02,150\n2024-01-03,200\n2024-01-04,130\n2024-01-05,170",
+    data="""Date,Revenue
+2024-01-01,100
+2024-01-08,150
+2024-01-15,200
+2024-01-22,130
+2024-01-29,170
+2024-02-05,190
+2024-02-12,220
+2024-02-19,250
+2024-02-26,210
+2024-03-04,230
+2024-03-11,260
+2024-03-18,280""",
     file_name="sample_data.csv",
     mime="text/csv",
 )
+
+# In-app preview of sample data
+st.markdown("Sample CSV Structure:")
+st.caption("First 5 rows of the sample CSV")
+sample_data = pd.DataFrame({
+    'Date': pd.to_datetime(['2024-01-01', '2024-01-08', '2024-01-15', '2024-01-22', '2024-01-29']),
+    'Revenue': [100, 150, 200, 130, 170]
+})
+st.dataframe(sample_data)
 
 # File Upload Section
 uploaded_file = st.file_uploader("Upload your CSV file (Date, Revenue columns required)", type="csv")
@@ -89,30 +112,76 @@ if uploaded_file:
                 if "model_metrics" not in st.session_state:
                     st.session_state.model_metrics = []
                 
-                model_choice = st.radio("Select a Model:", ["ARIMA", "SARIMA", "Prophet"])
+                model_choice = st.radio("Select a Model:", [
+                    "ARIMA (AutoRegressive Integrated Moving Average)", 
+                    "SARIMA (Seasonal ARIMA)", 
+                    "Prophet (by Facebook)"
+                ])
+
+                # Model Descriptions
+                if model_choice == "ARIMA (AutoRegressive Integrated Moving Average)":
+                    st.markdown("A statistical model that uses past data to predict future trends. Good for data with clear patterns.")
+                    # Add optional "Learn More" link
+                    # st.markdown("[Learn more about ARIMA](https://wikipedia.org/wiki/Autoregressive_integrated_moving_average)") 
+                elif model_choice == "SARIMA (Seasonal ARIMA)":
+                    st.markdown("An extension of ARIMA that handles data with seasonality (e.g., weekly, monthly, or yearly repeating patterns).")
+                elif model_choice == "Prophet (by Facebook)":
+                    st.markdown("A model developed by Facebook, designed for business time series data. It automatically handles seasonality, holidays, and other factors.")
 
                 # ARIMA Model
-                if model_choice == "ARIMA" or model_choice == "SARIMA":
+                if model_choice.startswith("ARIMA"):
                     st.subheader(f"{model_choice} Model Parameters")
-                    p = st.number_input("p (Auto-Regressive Term)", min_value=0, max_value=5, value=1)
-                    d = st.number_input("d (Differencing Term)", min_value=0, max_value=2, value=1)
-                    q = st.number_input("q (Moving Average Term)", min_value=0, max_value=5, value=1)
+                    p = st.number_input("p (Auto-Regressive Term)", min_value=0, max_value=5, value=1, help="The number of past data points to use for predicting the next value.")
+                    d = st.number_input("d (Differencing Term)", min_value=0, max_value=2, value=1, help="The number of times the data needs to be differenced to make it stationary.")
+                    q = st.number_input("q (Moving Average Term)", min_value=0, max_value=5, value=1, help="The number of past forecast errors to use in the model.")
 
-                    if model_choice == "SARIMA":
-                        P = st.number_input("P (Seasonal Auto-Regressive Term)", min_value=0, max_value=5, value=0)
-                        D = st.number_input("D (Seasonal Differencing Term)", min_value=0, max_value=2, value=0)
-                        Q = st.number_input("Q (Seasonal Moving Average Term)", min_value=0, max_value=5, value=0)
-                        s = st.number_input("S (Seasonal Periodicity)", min_value=0, max_value=24, value=0)
+                    forecast_horizon = st.number_input("Forecast Horizon (Days)", min_value=1, max_value=365, value=30)
+
+                    train = data[:-forecast_horizon]
+                    test = data[-forecast_horizon:]
+                    
+                    model = ARIMA(train["Revenue"], order=(p, d, q))
+
+                    model_fit = model.fit()
+                    forecast = model_fit.forecast(steps=len(test))
+
+                    mae, rmse, mape = evaluate_model(test["Revenue"], forecast)
+
+                    # Store metrics for comparison
+                    st.session_state.model_metrics.append({
+                        "Model": model_choice,
+                        "MAE": mae,
+                        "RMSE": rmse,
+                        "MAPE": mape
+                    })
+
+                    # Plot Results
+                    st.subheader(f"{model_choice} Forecast")
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=train["Date"], y=train["Revenue"], name="Train Data"))
+                    fig.add_trace(go.Scatter(x=test["Date"], y=test["Revenue"], name="Test Data"))
+                    fig.add_trace(go.Scatter(x=test["Date"], y=forecast, name=f"{model_choice} Forecast"))
+                    st.plotly_chart(fig)
+
+                    st.write(f"**MAE:** {mae:.2f}, **RMSE:** {rmse:.2f}, **MAPE:** {mape:.2f}%")
+
+                # SARIMA Model
+                elif model_choice.startswith("SARIMA"):
+                    st.subheader(f"{model_choice} Model Parameters")
+                    p = st.number_input("p (Auto-Regressive Term)", min_value=0, max_value=5, value=1, help="The number of past data points to use for predicting the next value.")
+                    d = st.number_input("d (Differencing Term)", min_value=0, max_value=2, value=1, help="The number of times the data needs to be differenced to make it stationary.")
+                    q = st.number_input("q (Moving Average Term)", min_value=0, max_value=5, value=1, help="The number of past forecast errors to use in the model.")
+                    P = st.number_input("P (Seasonal Auto-Regressive Term)", min_value=0, max_value=5, value=0, help="Similar to 'p', but for the seasonal component.")
+                    D = st.number_input("D (Seasonal Differencing Term)", min_value=0, max_value=2, value=0, help="Similar to 'd', but for the seasonal component.")
+                    Q = st.number_input("Q (Seasonal Moving Average Term)", min_value=0, max_value=5, value=0, help="Similar to 'q', but for the seasonal component.")
+                    s = st.number_input("S (Seasonal Periodicity)", min_value=0, max_value=24, value=0, help="The number of time steps in a single seasonal period (e.g., 12 for yearly seasonality).")
                     
                     forecast_horizon = st.number_input("Forecast Horizon (Days)", min_value=1, max_value=365, value=30)
 
                     train = data[:-forecast_horizon]
                     test = data[-forecast_horizon:]
                     
-                    if model_choice == "ARIMA":
-                        model = ARIMA(train["Revenue"], order=(p, d, q))
-                    elif model_choice == "SARIMA":
-                        model = ARIMA(train["Revenue"], order=(p, d, q), seasonal_order=(P, D, Q, s))
+                    model = ARIMA(train["Revenue"], order=(p, d, q), seasonal_order=(P, D, Q, s))
 
                     model_fit = model.fit()
                     forecast = model_fit.forecast(steps=len(test))
@@ -138,12 +207,12 @@ if uploaded_file:
                     st.write(f"**MAE:** {mae:.2f}, **RMSE:** {rmse:.2f}, **MAPE:** {mape:.2f}%")
 
                 # Prophet Model
-                elif model_choice == "Prophet":
+                elif model_choice == "Prophet (by Facebook)":
                     st.subheader("Prophet Hyperparameters")
-                    changepoint_scale = st.slider("Changepoint Prior Scale", 0.01, 0.5, 0.05)
-                    seasonality_scale = st.slider("Seasonality Prior Scale", 1.0, 10.0, 5.0)
-                    holidays_scale = st.slider("Holidays Prior Scale", 0.1, 10.0, 5.0)
-                    seasonality_mode = st.selectbox("Seasonality Mode", ("additive", "multiplicative"))
+                    changepoint_scale = st.slider("Changepoint Prior Scale", 0.01, 0.5, 0.05, help="Controls how flexible the trend is allowed to be. Higher values allow for more abrupt changes in the trend.")
+                    seasonality_scale = st.slider("Seasonality Prior Scale", 1.0, 10.0, 5.0, help="Controls the strength of the seasonality component. Higher values make the model fit more closely to the seasonal pattern.")
+                    holidays_scale = st.slider("Holidays Prior Scale", 0.1, 10.0, 5.0, help="Controls the strength of the holiday effects. Higher values allow for larger impacts of holidays on the forecast.")
+                    seasonality_mode = st.selectbox("Seasonality Mode", ("additive", "multiplicative"), help="Whether the seasonality should be modeled as additive (constant seasonal effect) or multiplicative (seasonal effect scales with the trend).")
                     
                     forecast_horizon = st.number_input("Forecast Horizon (Days)", min_value=1, max_value=365, value=30)
 
