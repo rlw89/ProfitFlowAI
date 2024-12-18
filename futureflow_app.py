@@ -162,7 +162,7 @@ if uploaded_file is not None:
         data = pd.read_csv(uploaded_file)
         if data.empty:
             raise ValueError("Uploaded CSV file is empty.")
-
+        
         # Identify date and revenue columns
         date_cols = data.columns[data.apply(lambda col: pd.to_datetime(col, errors='coerce').notnull().all())]
         revenue_cols = data.select_dtypes(include=['number']).columns
@@ -170,7 +170,7 @@ if uploaded_file is not None:
         st.subheader("Select Columns")
         date_column = st.selectbox("Date Column", date_cols, help="Select the column containing dates.")
         revenue_column = st.selectbox("Revenue Column", revenue_cols, help="Select the column containing revenue data.")
-        
+
         # Preprocess data
         data = preprocess_data(data, date_column, revenue_column)
         st.subheader("Uploaded Revenue Data")
@@ -178,8 +178,9 @@ if uploaded_file is not None:
         plot_data(data)
         check_stationarity(data["Revenue"])
 
-        except Exception as e:
+    except Exception as e:
         st.error(f"Error processing file: {e}")
 else:
     st.info("Upload a CSV file to see your forecasts.")
+
 
