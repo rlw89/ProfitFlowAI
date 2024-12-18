@@ -1,5 +1,4 @@
 {
-  "postCreateCommand": "python3 --version && python3 -m pip install --upgrade pip setuptools wheel && python3 -m pip install -r requirements.txt"
   "name": "Python 3",
   "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bullseye",
   "customizations": {
@@ -10,24 +9,18 @@
       ]
     },
     "vscode": {
-      "settings": {},
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance"
       ]
     }
   },
-  "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y < packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit Pillow Cython; echo '✅ Packages installed and Requirements met'",
-  "postAttachCommand": {
-    "server": "streamlit run futureflow_app.py --server.enableCORS false --server.enableXsrfProtection false"
-  },
+  "postCreateCommand": "apt-get update && apt-get install -y python3-distutils && python3 -m pip install --upgrade pip setuptools wheel && python3 -m pip install -r requirements.txt",
+  "forwardPorts": [8501],
   "portsAttributes": {
     "8501": {
-      "label": "Application",
+      "label": "Streamlit App",
       "onAutoForward": "openPreview"
     }
-  },
-  "forwardPorts": [
-    8501
-  ]
+  }
 }
